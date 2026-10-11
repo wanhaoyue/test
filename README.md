@@ -56,37 +56,8 @@ The project started as a manual deployment on ECS with the EC2 launch type, then
 ## Architecture
 
 ### Deployment flow (CI/CD)
+<img width="2171" height="635" alt="my-web-app drawio (1)" src="https://github.com/user-attachments/assets/252f4ad4-0ba4-4af4-ba17-936a4a390932" />
 
-```mermaid
-flowchart LR
-    Dev[Developer<br/>VS Code + Git] -->|git push| GH[GitHub Repository]
-    GH --> GA[GitHub Actions]
-
-    subgraph CI [CI - every push and pull request]
-        T[Unit tests<br/>pytest] --> B[Docker build check]
-    end
-
-    subgraph CD [CD - main branch only]
-        O[Assume AWS role<br/>via OIDC] --> P[Build and push image<br/>tag: commit SHA]
-        P --> R[Register new<br/>task definition]
-        R --> D[Update ECS service]
-        D --> S[Smoke test<br/>/health]
-    end
-
-    GA --> CI --> CD
-    P --> ECR[(Amazon ECR)]
-    D --> ECS[ECS Fargate Service]
-    ECR --> ECS
-    ECS --> CW[CloudWatch Logs]
-    User((User)) -->|HTTP :5000| ECS
-```
-
-<details>
-<summary>Original manual deployment diagram (EC2 launch type, before CI/CD)</summary>
-
-<img width="2493" height="839" alt="my-web-app drawio" src="https://github.com/user-attachments/assets/ddfd2b4b-4d5b-45eb-960c-aae1e817dbc4" />
-
-</details>
 
 ### Application flow
 
@@ -453,6 +424,7 @@ this exceeds GitHub's file size limit of 100.00 MB
 - Use `http://<ip>:5000` (HTTP, with the port).
 - Confirm the task status is **RUNNING** and the security group allows inbound TCP 5000.
 - The IP changes after every deployment, so always use the newest one.
+<img width="1893" height="841" alt="ECS interface" src="https://github.com/user-attachments/assets/ef039060-bf4d-4247-82b9-98b88117a429" />
 
 ---
 
@@ -472,6 +444,8 @@ this exceeds GitHub's file size limit of 100.00 MB
 - The `github_repo` value given to Terraform does not exactly match `<owner>/<repo>` (the trust policy is case-sensitive about the repository).
 - The workflow ran on a branch other than `main`. The role trusts only `refs/heads/main`.
 - The deploy job lacks `permissions: id-token: write`.
+- Repositories created or renamed after July 15, 2026 use immutable subject claims. Learn more about immutable subject claims.
+- Use the "Default subject claim prefix" at at "Settings" --> "Action" --> "OIDC" --> "Subject Claim" as the condiion for role trust policy.
 
 ---
 
@@ -485,7 +459,7 @@ this exceeds GitHub's file size limit of 100.00 MB
 
 #### A8. `terraform destroy` does not remove everything
 
-Terraform removes only what it created. Resources made by hand earlier are not in its state. See the leftovers checklist in [Cleanup](#cleanup).
+Terraform removes only what it created. Resources made by hand earlier and task definition created from CI/CD flows are not in its state. See the leftovers checklist in [Cleanup](#cleanup).
 
 ---
 
@@ -789,26 +763,6 @@ aws ecs update-service --cluster <CLUSTER_NAME> --service <SERVICE_NAME> --force
 
 ---
 
-## Future Improvements
-
-- [x] **CI/CD** with GitHub Actions (build, push to ECR, and deploy on every push, authenticating with OIDC instead of access keys)
-- [x] **Infrastructure as Code** with Terraform
-- [x] **CloudWatch Logs** via the `awslogs` log driver
-- [x] **Auto Scaling** for ECS tasks (CPU target tracking)
-- [x] **Image tagging** with Git commit SHA for easy rollbacks
-- [x] **Basic security scanning** with ECR scan on push
-- [x] **Unit tests** (pytest) that run before deployment
-- [x] **Automatic rollback** with the ECS deployment circuit breaker and a post-deploy smoke test
-- [ ] **Application Load Balancer** with health checks on `/health` for a stable URL and true zero-downtime deployments
-- [ ] **HTTPS and custom domain** with Route 53 and ACM
-- [ ] **Private subnets** for tasks behind the load balancer
-- [ ] **Terraform remote state** in S3 with locking, and a plan/apply workflow for infrastructure changes
-- [ ] **Vulnerability scanning in the pipeline** (for example Trivy)
-- [ ] **CloudWatch dashboards and alarms** with SNS notifications
-- [ ] **Stronger sentiment model** (for example a transformer-based model) for better accuracy than TextBlob's rule-based approach
-- [ ] **Persist results** in DynamoDB or RDS for history and analytics
-
----
 
 ## Lessons Learned
 
